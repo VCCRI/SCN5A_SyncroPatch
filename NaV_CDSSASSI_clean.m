@@ -148,7 +148,11 @@ for wells = 1:n_wellsAll(1)
         [minval,minind] = min(datasweeps_fromSSAstart(ind_start:end,sweeps)) ; % for peaks
         peaktime = time_SSA(minind+ind_start-1) ;
         times_sweep(wells,sweeps) = peaktime ;
+        try 
+        peaks_sweep(wells,sweeps) = mean(datasweeps_fromSSAstart(minind-2:minind+2,sweeps)
+        catch
         peaks_sweep(wells,sweeps) = minval   ; 
+        end
         if sweeps == 21, ind_start = minind ;
         else 
             ind_start = ind_start-1+minind ; % if second peak at same location as first peak then second idx=1 (relative to first) but 1+4 (e.g. if 4 was first index) = 5, hence minus 1
@@ -159,10 +163,19 @@ for wells = 1:n_wellsAll(1)
         [maxval,maxind] = max(datasweeps_fromSSAstart(:,sweeps)) ;
         [minval,minind] = min(datasweeps_fromSSAstart(:,sweeps)) ;
         if abs(maxval) > abs(minval)
-            peak = maxval ;
-            peaktime = time_SSA(maxind) ;
-        else peak = minval ;
-            peaktime = time_SSA(minind) ;
+        try 
+        peak = mean(datasweeps_fromSSAstart(maxind-2:maxind+2,sweeps)
+        catch
+        peak = maxval   ; 
+        end
+        peaktime = time_SSA(maxind) ;
+        else 
+        try 
+        peak = mean(datasweeps_fromSSAstart(minind-2:minind+2,sweeps)
+        catch        
+        peak = minval ;
+        end
+        peaktime = time_SSA(minind) ;
         end
         times_sweep(wells,sweeps) = peaktime ;
         peaks_sweep(wells,sweeps) = peak   ;     
@@ -344,12 +357,29 @@ writetable(CurrentDensitysqrt17,fullfile(Parent_dir,Exp_dir,Protocol_dir,PostQC_
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Datapoint QC
+toKeep_SSAPeaksTEST = toKeep_SSAPeaks(:,1:end-2)
+n_wellsAll = size(toKeep_SSAPeaksTEST)
+dpmind_5dp = nan(n_wellsAll(1),5)
+dpmin_lmean = nan(n_wellsAll(1),1)
 
+for wells = 1:n_wellsAll(1)  
+    [dpmin,dpmin_ind] = min(table2array(toKeep_SSAPeaksTEST(wells,:)))
+    dpmind_5dp(wells,:) = table2array(toKeep_SSAPeaksTEST(wells,dpmin_ind-4:dpmin_ind))
+    [maxmean,maxmeanind] = max(table2array(PeaksSSL_filtered(wells,1:end-2)))
+    dpmin_lmean(wells,1) = dpmind_5dp(wells,5)/2
+    dpmin_lmean(wells,2) = maxmean
+end 
+
+dpmincheck = dpmind_5dp(:,4) < dpmin_lmean(:,1) & dpmind_5dp(:,4)-dpmind_5dp(:,3) > dpmin_lmean(:,1) & dpmind_5dp(:,3)-dpmind_5dp(:,2) > dpmin_lmean(:,1) & dpmind_5dp(:,2) < dpmin_lmean(:,2) & dpmind_5dp(:,3) < dpmind_5dp(:,2) & dpmind_5dp(:,2) < dpmind_5dp(:,1)
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Steady State Activations
 
 voltagesSSA = voltages(9:29)
 
-PeaksAtMVcomp = toKeep_SSAPeaks(:,1:21)
+PeaksAtMVcomp = toKeep_SSAPeaks(dpmincheck,1:21)
 PeaksAtMV_filterLowertemp = PeaksAtMVcomp.peaks_sweep17 < pA_LowerLim & PeaksAtMVcomp.peaks_sweep17 > pA_UpperLim;
 PeaksAtMV_filterLow_Upp = PeaksAtMVcomp(PeaksAtMV_filterLowertemp,:) ;
 
@@ -454,7 +484,7 @@ writetable(WTmean1,fullfile(Parent_dir,Exp_dir,Protocol_dir,PostQC_dir,SSA_dir,S
 
 %   Steady State Inactivation
 
-PeaksAtMVcomp = toKeep_SSIPeaks
+PeaksAtMVcomp = toKeep_SSIPeaks(dpmincheck,:)
 PeaksAtMV_filterLowertemp = PeaksAtMVcomp.peaks_sweep1 < pA_LowerLim & PeaksAtMVcomp.peaks_sweep1 > pA_UpperLim ;
 PeaksAtMV_filterLow_Upp = PeaksAtMVcomp(PeaksAtMV_filterLowertemp,:) ;
 
